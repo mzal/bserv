@@ -1,0 +1,22 @@
+#!/bin/bash
+not_found_page="404.html"
+read request
+resource=$(echo $request | cut -d " " -f 2 | sed s#^/#./#g);
+if [[ $(echo $request | cut -d " " -f 1) == "GET" ]]; then
+    if [[ -f $resource ]]; then
+        echo "HTTP/1.1 200 OK";
+        echo -e "Connection: Keep-Alive";
+        if [[ $(echo ${resource##*.}) == "html" ]]; then
+            echo -e "Content-Type: text/html\n"
+        elif [[ $(echo ${resource##*.}) == "css" ]]; then
+            echo -e "Content-Type: text/css\n"
+        else
+            echo -e "Content-Type: $(file -b --mime-type $resource); charset=binary\n"
+        fi
+        echo $(tr -d '\0' <$resource);
+    else
+        echo -e "HTTP/1.1 404 Not found"
+        echo -e "Content-Type: text/html\n"
+        echo -e "`tr -d '\0' <$not_found_page`";
+    fi
+fi
