@@ -1,5 +1,32 @@
 #!/bin/bash
+
+load_config() {
+#loads configuration file at config.sh or creates a default one and a default 404 page if they don't exist
+    if [[ ! -f "config.sh" ]]; then
+        if [[ ! -f "404.html" ]]; then
+            { cat > 404.html <<EOF
+<html>
+    <head>
+        <title>Not found</title>
+    </head>
+    <body>
+        <h1>Resource not found</h1>
+    </body>
+</html>
+EOF
+            }
+        fi
+        { cat > config.sh <<EOF
+#404 page location
 not_found_page="404.html"
+EOF
+        }
+    fi
+    source $(dirname $0)/config.sh
+}
+
+load_config
+
 read request
 resource=$(echo $request | cut -d " " -f 2 | sed s#^/#./#g);
 if [[ $(echo $request | cut -d " " -f 1) == "GET" ]]; then
