@@ -1,10 +1,12 @@
 #!/bin/bash
 
+
 load_config() {
 #loads configuration file at config.sh or creates a default one and a default 404 page if they don't exist
     if [[ ! -f "config.sh" ]]; then
         if [[ ! -f "404.html" ]]; then
             { cat > 404.html <<EOF
+<!DOCTYPE html>
 <html>
     <head>
         <title>Not found</title>
@@ -19,31 +21,115 @@ EOF
         { cat > config.sh <<EOF
 #404 page location
 not_found_page="404.html"
+#request parameters log files
+get_log_file="get_log"
+post_log_file="post_log"
+#files forbidden from access
+forbidden_files=("serv config.sh \$get_log_file \$post_log_file")
+declare -A REWRITE=( [/]=index.html )
 EOF
         }
     fi
-    source $(dirname $0)/config.sh
+}
+
+read_request() {
+    read request_text
+#    request_text=""
+#    while read line ; do
+#        request_text+="$line \n"
+#        [ -z "$line" ] && break
+#    done
+}
+
+declare -A REQUEST
+parse_request() {
+    #parses the request text to associative table and changes the resource according to REWRITE
+    REQUEST[resource]=$(echo $request_text | cut -d " " -f 2 | cut -d "?" -f 1)
+    for path in ${!REWRITE[@]}; do
+        if [[ "${REQUEST[resource]}" == $path ]]; then
+            REQUEST[resource]=${REWRITE[$path]}
+            break
+        fi
+    done
+    REQUEST[method]=$(echo $request_text | cut -d " " -f 1) 
+    if [[ ${REQUEST[method]} == "GET" ]]; then
+        parse_get_params
+    elif [[ ${REQUEST[method]} == "POST" ]]; then
+        REQUEST[content-type]=$(echo $request_text | grep "Content-Type" | cut -d "")
+        parse_post_params
+    fi
+}
+
+parse_get_params() {
+    #parses parameters given in GET request
+    declare -A GET
+    get_params=$(echo $request_text | cut -d " " -f 2 | sed s#^/#./#g | cut -d "?" -f 2 | tr "&" "\n")
+    for param in $get_params; do
+        GET[$(echo $param | cut -d "=" -f 1)]=$(echo $param | cut -d "=" -f 2)
+    done
+    handle_get_params
+}
+
+handle_get_params() {
+    #logs GET parameters to log file
+    echo "" >> $get_log_file
+    for key in "${!GET[@]}"; do
+        echo -e "$key : ${GET[$key]}" >> $get_log_file
+    done
+}
+
+parse_post_params() {
+    declare -A POST
+    #TODO
+}
+
+construct_response_headers() {
+    #creates response headers and checks wheather the requested resource exists (file_found flag)
+    if [[ -f ${REQUEST[resource]} ]]; then
+        response_text="HTTP/1.1 200 OK\n";
+        response_text+="Connection: Keep-Alive\n";
+        response_text+="Content-Length: $(stat -c'%s' ${REQUEST[resource]})\n"
+        if [[ $(echo ${REQUEST[resource]##*.}) == "css" ]]; then
+            response_text+="Content-Type: text/css\n"
+        elif [[ $(echo ${REQUEST[resource]##*.}) == "js" ]]; then
+            response_text+="Content-Type: text/javascript\n"
+        else
+            response_text+="Content-Type: $(file -b --mime-type ${REQUEST[resource]})\n"
+        fi
+        response_text+="\n"
+        #response_text+=$(tr -d '\0' <${REQUEST[resource]})
+        file_found=1
+    else
+        response_text="HTTP/1.1 404 Not found\n"
+        response_text+="Content-Type: text/html\n"
+        #response_text+=$(tr -d '\0' <$not_found_page)
+        file_found=0
+    fi
+}
+
+send_response() {
+    #echoes the response headers and the resources content
+    echo -e $response_text
+    if [[ $file_found -eq 1 ]]; then
+        filename=${REQUEST[resource]};
+    else
+        filename=$not_found_page;
+    fi
+
+    while read line; do
+        echo "$line"
+    done < $filename
 }
 
 load_config
+source $(dirname $0)/config.sh
 
-read request
-resource=$(echo $request | cut -d " " -f 2 | sed s#^/#./#g);
-if [[ $(echo $request | cut -d " " -f 1) == "GET" ]]; then
-    if [[ -f $resource ]]; then
-        echo "HTTP/1.1 200 OK";
-        echo -e "Connection: Keep-Alive";
-        if [[ $(echo ${resource##*.}) == "html" ]]; then
-            echo -e "Content-Type: text/html\n"
-        elif [[ $(echo ${resource##*.}) == "css" ]]; then
-            echo -e "Content-Type: text/css\n"
-        else
-            echo -e "Content-Type: $(file -b --mime-type $resource); charset=binary\n"
-        fi
-        echo $(tr -d '\0' <$resource);
-    else
-        echo -e "HTTP/1.1 404 Not found"
-        echo -e "Content-Type: text/html\n"
-        echo -e "`tr -d '\0' <$not_found_page`";
-    fi
-fi
+read_request
+parse_request
+
+#debug part
+echo $request_text >> request_log
+#end of debug
+
+construct_response_headers
+send_response
