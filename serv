@@ -19,6 +19,10 @@ EOF
             }
         fi
         { cat > config.sh <<EOF
+#server port
+port=1234
+#root directory
+root_path="./"
 #404 page location
 not_found_page="404.html"
 #request parameters log files
@@ -26,7 +30,8 @@ get_log_file="get_log"
 post_log_file="post_log"
 #files forbidden from access
 forbidden_files=("serv config.sh \$get_log_file \$post_log_file")
-declare -A REWRITE=( [/]=index.html )
+#rewriting paths to resources
+declare -A REWRITE=( [/]=/index.html )
 EOF
         }
     fi
@@ -43,7 +48,7 @@ read_request() {
 
 declare -A REQUEST
 parse_request() {
-    #parses the request text to associative table and changes the resource according to REWRITE
+    #parses the request text to associative table and changes the resource according to REWRITE and creates a path to resource
     REQUEST[resource]=$(echo $request_text | cut -d " " -f 2 | cut -d "?" -f 1)
     for path in ${!REWRITE[@]}; do
         if [[ "${REQUEST[resource]}" == $path ]]; then
@@ -51,23 +56,26 @@ parse_request() {
             break
         fi
     done
+    REQUEST[resource]=$(echo ${REQUEST[resource]} | sed -e s#/#$root_path#)
     REQUEST[method]=$(echo $request_text | cut -d " " -f 1) 
     if [[ ${REQUEST[method]} == "GET" ]]; then
         parse_get_params
     elif [[ ${REQUEST[method]} == "POST" ]]; then
-        REQUEST[content-type]=$(echo $request_text | grep "Content-Type" | cut -d "")
+        REQUEST[content-type]=$(echo $request_text | grep "Content-Type" | cut -d ":" -f 2 | cut -d " " -f 2)
         parse_post_params
     fi
 }
 
 parse_get_params() {
     #parses parameters given in GET request
-    declare -A GET
-    get_params=$(echo $request_text | cut -d " " -f 2 | sed s#^/#./#g | cut -d "?" -f 2 | tr "&" "\n")
-    for param in $get_params; do
-        GET[$(echo $param | cut -d "=" -f 1)]=$(echo $param | cut -d "=" -f 2)
-    done
-    handle_get_params
+    if [[ $request_text == *"?"* ]]; then
+        declare -A GET
+        get_params=$(echo $request_text | cut -d " " -f 2 | cut -d "?" -f 2 | tr "&" "\n")
+        for param in $get_params; do
+            GET[$(echo $param | cut -d "=" -f 1)]=$(echo $param | cut -d "=" -f 2)
+        done
+        handle_get_params
+    fi
 }
 
 handle_get_params() {
