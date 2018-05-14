@@ -22,7 +22,9 @@ EOF
 #server port
 port=1234
 #root directory
-root_path="./"
+root_path="./web/"
+#name for the server
+server_name="bserv"
 #404 page location
 not_found_page="404.html"
 #request parameters log files
@@ -37,13 +39,13 @@ EOF
     fi
 }
 
+usage() {
+    echo "Usage: $0 [-h] [-r web_root]" 1>&2
+    exit 0
+}
+
 read_request() {
     read request_text
-#    request_text=""
-#    while read line ; do
-#        request_text+="$line \n"
-#        [ -z "$line" ] && break
-#    done
 }
 
 declare -A REQUEST
@@ -60,9 +62,8 @@ parse_request() {
     REQUEST[method]=$(echo $request_text | cut -d " " -f 1) 
     if [[ ${REQUEST[method]} == "GET" ]]; then
         parse_get_params
-    elif [[ ${REQUEST[method]} == "POST" ]]; then
-        REQUEST[content-type]=$(echo $request_text | grep "Content-Type" | cut -d ":" -f 2 | cut -d " " -f 2)
-        parse_post_params
+    else
+        not_implemented_error=1
     fi
 }
 
@@ -86,58 +87,72 @@ handle_get_params() {
     done
 }
 
-parse_post_params() {
-    declare -A POST
-    #TODO
-}
-
 construct_response_headers() {
     #creates response headers and checks wheather the requested resource exists (file_found flag)
-    if [[ -f ${REQUEST[resource]} ]]; then
-        response_text="HTTP/1.1 200 OK\n";
-        response_text+="Connection: Keep-Alive\n";
-        response_text+="Content-Length: $(stat -c'%s' ${REQUEST[resource]})\n"
-        if [[ $(echo ${REQUEST[resource]##*.}) == "css" ]]; then
-            response_text+="Content-Type: text/css\n"
-        elif [[ $(echo ${REQUEST[resource]##*.}) == "js" ]]; then
-            response_text+="Content-Type: text/javascript\n"
-        else
-            response_text+="Content-Type: $(file -b --mime-type ${REQUEST[resource]})\n"
-        fi
-        response_text+="\n"
-        #response_text+=$(tr -d '\0' <${REQUEST[resource]})
-        file_found=1
+    if [[ $not_implemented_error -eq 1 ]]; then
+        response_text="HTTP/1.1 501 Not Implemented \n"
+        response_text="\nMethod not implemented"
     else
-        response_text="HTTP/1.1 404 Not found\n"
-        response_text+="Content-Type: text/html\n"
-        #response_text+=$(tr -d '\0' <$not_found_page)
-        file_found=0
+        if [[ -f ${REQUEST[resource]} ]]; then
+            response_text="HTTP/1.1 200 OK\n"
+            response_text+="Connection: Keep-Alive\n"
+            response_text+="Content-Length: $(stat -c'%s' ${REQUEST[resource]})\n"
+            if [[ $(echo ${REQUEST[resource]##*.}) == "css" ]]; then
+                response_text+="Content-Type: text/css\n"
+            elif [[ $(echo ${REQUEST[resource]##*.}) == "js" ]]; then
+                response_text+="Content-Type: text/javascript\n"
+            else
+                response_text+="Content-Type: $(file -b --mime-type ${REQUEST[resource]})\n"
+            fi
+            response_text+="Date: $(date)\n"
+            response_text+="Server: $server_name\n"
+            #response_text+="\n"
+            #response_text+=$(tr -d '\0' <${REQUEST[resource]})
+            file_found=1
+        else
+            response_text="HTTP/1.1 404 Not found\n"
+            response_text+="Date: $(date)\n"
+            response_text+="Content-Type: text/html\n"
+            #response_text+=$(tr -d '\0' <$not_found_page)
+            file_found=0
+        fi 
     fi
 }
 
 send_response() {
     #echoes the response headers and the resources content
     echo -e $response_text
-    if [[ $file_found -eq 1 ]]; then
-        filename=${REQUEST[resource]};
-    else
-        filename=$not_found_page;
-    fi
+    if [[ $not_implemented_error -ne 1 ]]; then
+        if [[ $file_found -eq 1 ]]; then
+            filename=${REQUEST[resource]};
+        else
+            filename=$not_found_page;
+        fi
 
-    while read line; do
-        echo "$line"
-    done < $filename
+        while read line; do
+            echo "$line"
+        done < $filename
+    fi
 }
 
 load_config
 source $(dirname $0)/config.sh
 
+while getopts ":hr:" opt; do
+    case $opt in
+        r)
+            #change root directory of served files
+            root_path=$OPTARG
+            ;;
+        h | *)
+            #display help
+            usage
+            exit 0
+            ;;
+    esac
+done
+
 read_request
 parse_request
-
-#debug part
-echo $request_text >> request_log
-#end of debug
-
 construct_response_headers
 send_response

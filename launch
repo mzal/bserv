@@ -1,5 +1,24 @@
 #!/bin/bash
 
+usage() {
+    echo "Usage: $0 [-h] [-r web_root] [-p port]"
+}
+
 source $(dirname $0)/config.sh
 
-eval "nc -lkp $port -e ./serv"
+while getopts ":hr:p:" opt; do
+    case $opt in
+        r)
+            root_path=$OPTARG
+            ;;
+        p)
+            port=$OPTARG
+            ;;
+        h | *)
+            usage
+            exit 0
+            ;;
+    esac
+done
+
+eval "nc -lkp $port -e \"./serv -r $root_path\""
