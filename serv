@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# Author           : Michał Zalewski 
+# Created On       : 2018-05-16
+# Last Modified By : Michał Zalewski
+# Last Modified On : 2018-05-16
+# Version          : 0.1
+#
+# Description      :
+# Simple http request parser, that serves plaintext files in response to 
+# GET requests and saves GET parameters
+#
+# Licensed under MIT license (for more details see LICENSE)
+
 
 load_config() {
 #loads configuration file at config.sh or creates a default one and a default 404 page if they don't exist
@@ -31,7 +43,6 @@ not_found_page="404.html"
 get_log_file="get_log"
 post_log_file="post_log"
 #files forbidden from access
-forbidden_files=("serv config.sh \$get_log_file \$post_log_file")
 #rewriting paths to resources
 declare -A REWRITE=( [/]=/index.html )
 EOF
@@ -90,30 +101,27 @@ handle_get_params() {
 construct_response_headers() {
     #creates response headers and checks wheather the requested resource exists (file_found flag)
     if [[ $not_implemented_error -eq 1 ]]; then
-        response_text="HTTP/1.1 501 Not Implemented \n"
-        response_text="\nMethod not implemented"
+        response_text="HTTP/1.1 501 Not Implemented \r\n"
+        response_text="\r\nMethod not implemented"
     else
         if [[ -f ${REQUEST[resource]} ]]; then
-            response_text="HTTP/1.1 200 OK\n"
-            response_text+="Connection: Keep-Alive\n"
-            response_text+="Content-Length: $(stat -c'%s' ${REQUEST[resource]})\n"
+            response_text="HTTP/1.1 200 OK\r\n"
+            response_text+="Connection: Keep-Alive\r\n"
+            response_text+="Content-Length: $(stat -c'%s' ${REQUEST[resource]})\r\n"
             if [[ $(echo ${REQUEST[resource]##*.}) == "css" ]]; then
-                response_text+="Content-Type: text/css\n"
+                response_text+="Content-Type: text/css\r\n"
             elif [[ $(echo ${REQUEST[resource]##*.}) == "js" ]]; then
-                response_text+="Content-Type: text/javascript\n"
+                response_text+="Content-Type: text/javascript\r\n"
             else
-                response_text+="Content-Type: $(file -b --mime-type ${REQUEST[resource]})\n"
+                response_text+="Content-Type: $(file -b --mime-type ${REQUEST[resource]})\r\n"
             fi
-            response_text+="Date: $(date)\n"
-            response_text+="Server: $server_name\n"
-            #response_text+="\n"
-            #response_text+=$(tr -d '\0' <${REQUEST[resource]})
+            response_text+="Date: $(date)\r\n"
+            response_text+="Server: $server_name\r\n"
             file_found=1
         else
-            response_text="HTTP/1.1 404 Not found\n"
-            response_text+="Date: $(date)\n"
-            response_text+="Content-Type: text/html\n"
-            #response_text+=$(tr -d '\0' <$not_found_page)
+            response_text="HTTP/1.1 404 Not found\r\n"
+            response_text+="Date: $(date)\r\n"
+            response_text+="Content-Type: text/html\r\n"
             file_found=0
         fi 
     fi
