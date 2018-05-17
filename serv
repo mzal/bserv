@@ -41,8 +41,6 @@ server_name="bserv"
 not_found_page="404.html"
 #request parameters log files
 get_log_file="get_log"
-post_log_file="post_log"
-#files forbidden from access
 #rewriting paths to resources
 declare -A REWRITE=( [/]=/index.html )
 EOF
